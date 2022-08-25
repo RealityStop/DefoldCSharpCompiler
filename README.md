@@ -1,3 +1,8 @@
+# This is a custom fork of [CSharp.lua](https://github.com/yanghuan/CSharp.lua)
+
+With specific modifications to be suitable for generating viable [defold](https://defold.com/) code
+
+
 # CSharp.lua
 The C# to Lua compiler.
 
