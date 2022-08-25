@@ -1,6 +1,6 @@
 # This is a custom fork of [CSharp.lua](https://github.com/yanghuan/CSharp.lua)
 
-With specific modifications to be suitable for generating viable [defold](https://defold.com/) code
+With specific modifications to be suitable for generating viable [defold](https://defold.com/) code.  These changes are concentrated on the `defold` branch.  Master branch is intentionally kept clean for ease of merging in changes from the base project.
 
 
 
