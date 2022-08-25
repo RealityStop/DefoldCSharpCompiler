@@ -698,16 +698,11 @@ local schar = string.char
 
 -- https://github.com/ToxicFrog/vstruct/blob/master/io/endianness.lua#L30
 local isLittleEndian = true
-if rawget(global, "jit") then
-  if require("ffi").abi("be") then
-    isLittleEndian = false
-  end
-else 
-  local dump = string.dump
-  if dump and sbyte(dump(System.emptyFn), 7) == 0x00 then
-    isLittleEndian = false
-  end
+local dump = string.dump
+if dump and sbyte(dump(System.emptyFn), 7) == 0x00 then
+  isLittleEndian = false
 end
+
 
 local function bytes(t)
   return arrayFromTable(t, Byte)    
