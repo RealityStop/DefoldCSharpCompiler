@@ -274,6 +274,7 @@ namespace CSharpLua {
         WriteCompilationUnit(luaCompilationUnit, streamWriter);
       }
       WriteSingleFileManifest(streamWriter);
+      DefoldScriptGenerator.WriteDefoldScripts(outFolder, compilation_);
     }
 
     private static string GetSystemLibName(string path) {
