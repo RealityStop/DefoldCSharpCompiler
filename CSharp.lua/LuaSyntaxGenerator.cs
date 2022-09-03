@@ -259,23 +259,28 @@ namespace CSharpLua {
       ExportManifestFile(modules, outFolder);
     }
 
+
     public void GenerateSingleFile(string outFile, string outFolder, IEnumerable<string> luaSystemLibs) {
-      outFile = GetOutFileRelativePath(outFile, outFolder, out _);
-      using var streamWriter = new StreamWriter(outFile, false, Encoding);
-      streamWriter.WriteLine("CSharpLuaSingleFile = true");
-      bool isFirst = true;
-      foreach (var luaSystemLib in luaSystemLibs) {
-        WriteLuaSystemLib(luaSystemLib, streamWriter, isFirst);
-        isFirst = false;
-      }
-      streamWriter.WriteLine();
-      streamWriter.WriteLine(LuaSyntaxNode.Tokens.ShortComment + LuaCompilationUnitSyntax.GeneratedMarkString);
-      foreach (var luaCompilationUnit in Create(true)) {
-        WriteCompilationUnit(luaCompilationUnit, streamWriter);
-      }
-      WriteSingleFileManifest(streamWriter);
-      DefoldScriptGenerator.WriteDefoldScripts(outFolder, compilation_);
+        outFile = GetOutFileRelativePath(outFile, outFolder, out _);
+        using var streamWriter = new StreamWriter(outFile, false, Encoding);
+        streamWriter.WriteLine("CSharpLuaSingleFile = true");
+        bool isFirst = true;
+        foreach (var luaSystemLib in luaSystemLibs) {
+            WriteLuaSystemLib(luaSystemLib, streamWriter, isFirst);
+            isFirst = false;
+        }
+
+        streamWriter.WriteLine();
+        streamWriter.WriteLine(LuaSyntaxNode.Tokens.ShortComment + LuaCompilationUnitSyntax.GeneratedMarkString);
+        foreach (var luaCompilationUnit in Create(true)) {
+            WriteCompilationUnit(luaCompilationUnit, streamWriter);
+        }
+
+        WriteSingleFileManifest(streamWriter);
+        var defoldGen = new DefoldScriptGenerator();
+        defoldGen.WriteDefoldScripts(outFolder, compilation_);
     }
+
 
     private static string GetSystemLibName(string path) {
       const string kBegin = "CoreSystem";
