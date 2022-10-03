@@ -34,7 +34,7 @@ public class DefoldScriptGenerator {
 
     private void GenScript(string outputFolder, string inputFile, SemanticModel model, ClassDeclarationSyntax classDeclaration) {
         string classname = classDeclaration.Identifier.ToString();
-        if (classname == "GameObjectScript" || classname == "GenGOScriptAttribute")
+        if (classname.StartsWith("GameObjectScript") || classname == "GenGOScriptAttribute")
             return;
 
         var methods = classDeclaration.Members.OfType<MethodDeclarationSyntax>();
@@ -49,6 +49,7 @@ public class DefoldScriptGenerator {
             writer.WriteLine("");
             writer.WriteLine("function init(self)");
             writer.WriteLine($"\tself.script = {classname.ToString()}()");
+            writer.WriteLine($"\tself.script:AssignProperties(self)");
             if (methods.Any(x => x.Identifier.ToString().Equals("init")))
                 writer.WriteLine($"\tself.script:init()");
             writer.WriteLine("end");
@@ -102,28 +103,32 @@ public class DefoldScriptGenerator {
     private void GenerateProperties(StreamWriter writer, SemanticModel model, ClassDeclarationSyntax classDeclaration) {
         var typeSymbol = model.GetDeclaredSymbol(classDeclaration);
 
+        //First, find the base type that has the markup
+        var genericBasetypes = this.GetBaseTypes(model.GetDeclaredSymbol(classDeclaration)).Where(x => x.Name.StartsWith("GameObjectScript"))
+            .Cast<INamedTypeSymbol>().Where(x => x.IsGenericType);
+
+        if (genericBasetypes.Count() != 1)
+            throw new InvalidOperationException($"Generic base count is {genericBasetypes.Count()}");
+
+        typeSymbol = genericBasetypes.First();
+        typeSymbol =(INamedTypeSymbol)typeSymbol.TypeArguments.First();
+
         var fields = GetBaseTypes(typeSymbol).SelectMany(x => x.GetMembers()).Where(x => x.Kind == SymbolKind.Field)
             .Cast<IFieldSymbol>();
 
         foreach (var fieldSymbol in fields) {
-            var DefoldProperty =
-                fieldSymbol.GetAttributes()
-                    .FirstOrDefault(x => x.AttributeClass.ToString().EndsWith("DefoldPropertyAttribute"));
+            //var defoldProperty =
+            //    fieldSymbol.GetAttributes()
+            //        .FirstOrDefault(x => x.AttributeClass.ToString().EndsWith("DefoldPropertyAttribute"));
 
-
-
-            if (DefoldProperty != default) {
-                HandleProperty(writer, DefoldProperty, fieldSymbol);
-                continue;
-            }
+            HandleProperty(writer, /*defoldProperty*/ null, fieldSymbol);
         }
     }
-
 
     private static void HandleProperty(StreamWriter writer, AttributeData DefoldProperty, IFieldSymbol fieldSymbol)
     {
         //If there is a specified attribute argument, use that.
-        if (DefoldProperty.ConstructorArguments.Length >= 1) {
+        if ((DefoldProperty?.ConstructorArguments.Length ?? 0) >= 1) {
             ConstructPropertyFromAttribute(writer, DefoldProperty, fieldSymbol);
             return;
         }
