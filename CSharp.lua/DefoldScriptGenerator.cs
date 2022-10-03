@@ -18,37 +18,67 @@ public class DefoldScriptGenerator {
         _compilation = compilation;
         
         var classDeclarations =
-            compilation.SyntaxTrees.Select<SyntaxTree, (string, SemanticModel, IEnumerable<ClassDeclarationSyntax>)>(x =>
-                (x.FilePath, _compilation.GetSemanticModel(x) , x.GetRoot().ChildNodes().OfType<ClassDeclarationSyntax>()));
+            compilation.SyntaxTrees.Select<SyntaxTree, (string, SemanticModel, IEnumerable<(INamedTypeSymbol, ClassDeclarationSyntax)>)>(x =>
+                (x.FilePath, _compilation.GetSemanticModel(x) , FetchClassDeclarations(_compilation.GetSemanticModel(x), x)));
 
 
         foreach (var fileDeclarationsCollection in classDeclarations) {
-            foreach (var classDeclaration in fileDeclarationsCollection.Item3) {
-                if (IsFlaggedForScript(classDeclaration, compilation)) {
-                    GenScript(outFolder, fileDeclarationsCollection.Item1, fileDeclarationsCollection.Item2, classDeclaration);
+            foreach (var declaration in fileDeclarationsCollection.Item3) {
+                if (IsFlaggedForScript(declaration.Item1)) {
+                    GenScript(outFolder, fileDeclarationsCollection.Item1, fileDeclarationsCollection.Item2, declaration.Item1, declaration.Item2);
                 }
             }
         }
     }
 
 
-    private void GenScript(string outputFolder, string inputFile, SemanticModel model, ClassDeclarationSyntax classDeclaration) {
-        string classname = classDeclaration.Identifier.ToString();
-        if (classname.StartsWith("GameObjectScript") || classname == "GenGOScriptAttribute")
+
+
+    private static IEnumerable<(INamedTypeSymbol, ClassDeclarationSyntax)> FetchClassDeclarations(SemanticModel model, SyntaxTree tree) {
+        var childNodes = tree.GetRoot().ChildNodes();
+        var directClasses = childNodes.OfType<ClassDeclarationSyntax>()
+            .Select(x => (model.GetDeclaredSymbol(x),x));
+        
+        var namespaceClasses = childNodes.OfType<NamespaceDeclarationSyntax>()
+            .SelectMany(x =>
+                x.ChildNodes().OfType<ClassDeclarationSyntax>().Select(y=> (model.GetDeclaredSymbol(y),y)));
+        return directClasses.Concat(namespaceClasses);
+    }
+
+
+    private void GenScript(string originalOutputFolder, string inputFile, SemanticModel model,
+        INamedTypeSymbol typeSymbol, ClassDeclarationSyntax classDeclaration) 
+    {
+        string classname = typeSymbol.MetadataName;
+        string fullQualifiedName = typeSymbol.MetadataName;
+        string outputFolder = originalOutputFolder;
+
+        if (typeSymbol.ContainingNamespace != null && !string.IsNullOrEmpty(typeSymbol.ContainingNamespace.Name)) {
+            fullQualifiedName = $"{typeSymbol.ContainingNamespace.Name}.{typeSymbol.Name}";
+            outputFolder = Path.Combine(originalOutputFolder, typeSymbol.ContainingNamespace.Name);
+            if (!Directory.Exists(outputFolder))
+                Directory.CreateDirectory(outputFolder);
+        }
+
+        var doNotGenerateAttr =
+            typeSymbol.GetAttributes()
+                .FirstOrDefault(x => x.AttributeClass.ToString().Contains("DoNotGenerate"));
+        
+        if (doNotGenerateAttr!= null)
             return;
 
         var methods = classDeclaration.Members.OfType<MethodDeclarationSyntax>();
 
-        using (var writer = new StreamWriter(Path.Combine(outputFolder, classname) + ".script")) {
-            writer.WriteLine($"require \"{Path.GetFileName(outputFolder)}.out\"");
+        using (var writer = new StreamWriter(Path.Combine(outputFolder, classname) + DetermineScriptTypeExtension(typeSymbol))) {
+            writer.WriteLine($"require \"{Path.GetFileName(originalOutputFolder)}.out\"");
 
-            GenerateProperties(writer, model, classDeclaration);
+            GenerateProperties(writer, model, typeSymbol, classDeclaration);
 
 
 
             writer.WriteLine("");
             writer.WriteLine("function init(self)");
-            writer.WriteLine($"\tself.script = {classname.ToString()}()");
+            writer.WriteLine($"\tself.script = {fullQualifiedName.ToString()}()");
             writer.WriteLine($"\tself.script:AssignProperties(self)");
             if (methods.Any(x => x.Identifier.ToString().Equals("init")))
                 writer.WriteLine($"\tself.script:init()");
@@ -97,14 +127,28 @@ public class DefoldScriptGenerator {
                 writer.WriteLine("");
             }
         }
+        
+        Console.WriteLine($"\t{classname}");
     }
 
 
-    private void GenerateProperties(StreamWriter writer, SemanticModel model, ClassDeclarationSyntax classDeclaration) {
-        var typeSymbol = model.GetDeclaredSymbol(classDeclaration);
+    private string DetermineScriptTypeExtension(INamedTypeSymbol namedTypeSymbol)
+    {
+        var baseTypes = GetBaseTypes(namedTypeSymbol);
+        if (baseTypes.Any(x=>x.Name.Contains("GameObjectScript", StringComparison.OrdinalIgnoreCase)))
+            return ".script";
+
+        if (baseTypes.Any(x => x.Name.Contains("GUIScript", StringComparison.OrdinalIgnoreCase)))
+            return ".gui_script";
+
+        throw new InvalidOperationException("unknown script type");
+    }
+
+
+    private void GenerateProperties(StreamWriter writer, SemanticModel model, INamedTypeSymbol typeSymbol, ClassDeclarationSyntax classDeclaration) {
 
         //First, find the base type that has the markup
-        var genericBasetypes = this.GetBaseTypes(model.GetDeclaredSymbol(classDeclaration)).Where(x => x.Name.StartsWith("GameObjectScript"))
+        var genericBasetypes = this.GetBaseTypes(typeSymbol).Where(x => x.Name.StartsWith("GameObjectScript",StringComparison.OrdinalIgnoreCase)||x.Name.StartsWith("GUIScript", StringComparison.OrdinalIgnoreCase))
             .Cast<INamedTypeSymbol>().Where(x => x.IsGenericType);
 
         if (genericBasetypes.Count() != 1)
@@ -364,21 +408,13 @@ public class DefoldScriptGenerator {
         }
     }
 
-    
 
-
-    public bool IsFlaggedForScript(ClassDeclarationSyntax syntax, CSharpCompilation compilation) {
-        var rootType = compilation.GetTypeByMetadataName(syntax.Identifier.ToString());
-        return (TypeIsFlaggedForScript(rootType));
-    }
-
-
-    private bool TypeIsFlaggedForScript(INamedTypeSymbol type) {
+    private bool IsFlaggedForScript(INamedTypeSymbol type) {
         if (type.GetAttributes().Any(x => x.AttributeClass.ToString().EndsWith("GenGOScriptAttribute")))
             return true;
 
         if (type.BaseType != null)
-            return TypeIsFlaggedForScript(type.BaseType);
+            return IsFlaggedForScript(type.BaseType);
 
         return false;
     }
