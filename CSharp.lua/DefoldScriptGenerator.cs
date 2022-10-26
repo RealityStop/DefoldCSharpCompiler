@@ -71,7 +71,7 @@ public class DefoldScriptGenerator {
 
         using (var writer = new StreamWriter(Path.Combine(outputFolder, classname) + DetermineScriptTypeExtension(typeSymbol))) {
             writer.WriteLine($"require \"{Path.GetFileName(originalOutputFolder)}.out\"");
-
+            
             GenerateProperties(writer, model, typeSymbol, classDeclaration);
 
 
@@ -80,6 +80,8 @@ public class DefoldScriptGenerator {
             writer.WriteLine("function init(self)");
             writer.WriteLine($"\tself.script = {fullQualifiedName.ToString()}()");
             writer.WriteLine($"\tself.script:AssignProperties(self)");
+            writer.WriteLine($"\tsupport.Component.Register(self.script.Locator, self.script, {fullQualifiedName.ToString()})");
+            
             if (methods.Any(x => x.Identifier.ToString().Equals("init")))
                 writer.WriteLine($"\tself.script:init()");
             writer.WriteLine("end");
