@@ -47,8 +47,7 @@ public class DefoldScriptGenerator {
 
 
     private void GenScript(string originalOutputFolder, string inputFile, SemanticModel model,
-        INamedTypeSymbol typeSymbol, ClassDeclarationSyntax classDeclaration) 
-    {
+        INamedTypeSymbol typeSymbol, ClassDeclarationSyntax classDeclaration) {
         string classname = typeSymbol.MetadataName;
         string fullQualifiedName = typeSymbol.MetadataName;
         string outputFolder = originalOutputFolder;
@@ -63,15 +62,16 @@ public class DefoldScriptGenerator {
         var doNotGenerateAttr =
             typeSymbol.GetAttributes()
                 .FirstOrDefault(x => x.AttributeClass.ToString().Contains("DoNotGenerate"));
-        
-        if (doNotGenerateAttr!= null)
+
+        if (doNotGenerateAttr != null)
             return;
 
         var methods = classDeclaration.Members.OfType<MethodDeclarationSyntax>();
 
-        using (var writer = new StreamWriter(Path.Combine(outputFolder, classname) + DetermineScriptTypeExtension(typeSymbol))) {
+        using (var writer =
+               new StreamWriter(Path.Combine(outputFolder, classname) + DetermineScriptTypeExtension(typeSymbol))) {
             writer.WriteLine($"require \"{Path.GetFileName(originalOutputFolder)}.out\"");
-            
+
             GenerateProperties(writer, model, typeSymbol, classDeclaration);
 
 
@@ -80,19 +80,18 @@ public class DefoldScriptGenerator {
             writer.WriteLine("function init(self)");
             writer.WriteLine($"\tself.script = {fullQualifiedName.ToString()}()");
             writer.WriteLine($"\tself.script:AssignProperties(self)");
-            writer.WriteLine($"\tsupport.Component.Register(self.script.Locator, self.script, {fullQualifiedName.ToString()})");
-            
+            writer.WriteLine(
+                $"\tsupport.Component.Register(self.script.Locator, self.script, {fullQualifiedName.ToString()})");
+
             if (methods.Any(x => x.Identifier.ToString().Equals("init")))
                 writer.WriteLine($"\tself.script:init()");
             writer.WriteLine("end");
             writer.WriteLine("");
 
-            if (methods.Any(x => x.Identifier.ToString().Equals("final"))) {
-                writer.WriteLine("function final(self)");
-                writer.WriteLine($"\tself.script:final()");
-                writer.WriteLine("end");
-                writer.WriteLine("");
-            }
+            writer.WriteLine("function final(self)");
+            writer.WriteLine($"\tself.script:final()");
+            writer.WriteLine("end");
+            writer.WriteLine("");
 
             if (methods.Any(x => x.Identifier.ToString().Equals("update"))) {
                 writer.WriteLine("function update(self, dt)");
@@ -129,7 +128,7 @@ public class DefoldScriptGenerator {
                 writer.WriteLine("");
             }
         }
-        
+
         Console.WriteLine($"\t{classname}");
     }
 
