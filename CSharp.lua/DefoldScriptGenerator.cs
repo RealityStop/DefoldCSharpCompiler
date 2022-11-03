@@ -81,7 +81,7 @@ public class DefoldScriptGenerator {
             writer.WriteLine($"\tself.script = {fullQualifiedName.ToString()}()");
             writer.WriteLine($"\tself.script:AssignProperties(self)");
             writer.WriteLine(
-                $"\tsupport.Component.Register(self.script.Locator, self.script, {fullQualifiedName.ToString()})");
+                $"\tsupport.Component.Register(self.script.LocatorUrl, self.script, {fullQualifiedName.ToString()})");
 
             if (methods.Any(x => x.Identifier.ToString().Equals("init")))
                 writer.WriteLine($"\tself.script:init()");
