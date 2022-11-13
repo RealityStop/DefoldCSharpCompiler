@@ -108,8 +108,8 @@ public class DefoldScriptGenerator {
             }
 
             if (methods.Any(x => x.Identifier.ToString().Equals("on_message"))) {
-                writer.WriteLine("function on_message(self, message, sender)");
-                writer.WriteLine($"\tself.script:on_message(message, sender)");
+                writer.WriteLine("function on_message(self, message_id, message, sender)");
+                writer.WriteLine($"\tself.script:on_message(message_id, message, sender)");
                 writer.WriteLine("end");
                 writer.WriteLine("");
             }
