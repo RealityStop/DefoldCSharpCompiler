@@ -15,6 +15,8 @@ public class DefoldScriptGenerator {
 
     public void WriteDefoldScripts(string outFolder, CSharpCompilation compilation) {
 
+        Console.WriteLine("Generating script files...");
+        
         _compilation = compilation;
         
         var classDeclarations =
@@ -24,8 +26,8 @@ public class DefoldScriptGenerator {
 
         foreach (var fileDeclarationsCollection in classDeclarations) {
             foreach (var declaration in fileDeclarationsCollection.Item3) {
-                if (IsFlaggedForScript(declaration.Item1)) {
-                    GenScript(outFolder, fileDeclarationsCollection.Item1, fileDeclarationsCollection.Item2, declaration.Item1, declaration.Item2);
+                if (IsFlaggedForScript(declaration.Item1, out string scriptExtension)) {
+                    GenScript(outFolder, fileDeclarationsCollection.Item1, fileDeclarationsCollection.Item2, declaration.Item1, declaration.Item2, scriptExtension);
                 }
             }
         }
@@ -47,7 +49,7 @@ public class DefoldScriptGenerator {
 
 
     private void GenScript(string originalOutputFolder, string inputFile, SemanticModel model,
-        INamedTypeSymbol typeSymbol, ClassDeclarationSyntax classDeclaration) {
+        INamedTypeSymbol typeSymbol, ClassDeclarationSyntax classDeclaration, string scriptExtension) {
         string classname = typeSymbol.MetadataName;
         string fullQualifiedName = typeSymbol.MetadataName;
         string outputFolder = originalOutputFolder;
@@ -69,7 +71,7 @@ public class DefoldScriptGenerator {
         var methods = classDeclaration.Members.OfType<MethodDeclarationSyntax>();
 
         using (var writer =
-               new StreamWriter(Path.Combine(outputFolder, classname) + DetermineScriptTypeExtension(typeSymbol))) {
+               new StreamWriter(Path.Combine(outputFolder, classname) + "." + scriptExtension)) {
             writer.WriteLine($"require \"{Path.GetFileName(originalOutputFolder)}.out\"");
 
             GenerateProperties(writer, model, typeSymbol, classDeclaration);
@@ -129,31 +131,20 @@ public class DefoldScriptGenerator {
             }
         }
 
-        Console.WriteLine($"\t{classname}");
-    }
-
-
-    private string DetermineScriptTypeExtension(INamedTypeSymbol namedTypeSymbol)
-    {
-        var baseTypes = GetBaseTypes(namedTypeSymbol);
-        if (baseTypes.Any(x=>x.Name.Contains("GameObjectScript", StringComparison.OrdinalIgnoreCase)))
-            return ".script";
-
-        if (baseTypes.Any(x => x.Name.Contains("GUIScript", StringComparison.OrdinalIgnoreCase)))
-            return ".gui_script";
-
-        throw new InvalidOperationException("unknown script type");
+        Console.WriteLine($"\t{classname}.{scriptExtension}");
     }
 
 
     private void GenerateProperties(StreamWriter writer, SemanticModel model, INamedTypeSymbol typeSymbol, ClassDeclarationSyntax classDeclaration) {
 
         //First, find the base type that has the markup
-        var genericBasetypes = this.GetBaseTypes(typeSymbol).Where(x => x.Name.StartsWith("GameObjectScript",StringComparison.OrdinalIgnoreCase)||x.Name.StartsWith("GUIScript", StringComparison.OrdinalIgnoreCase))
+        var genericBasetypes = this.GetBaseTypes(typeSymbol)
+            .Where(x=>x.GetAttributes().Any(x=>x.AttributeClass.ToString().EndsWith("GenScriptAttribute")))
+            //.Where(x => x.Name.StartsWith("GameObjectScript",StringComparison.OrdinalIgnoreCase)||x.Name.StartsWith("GUIScript", StringComparison.OrdinalIgnoreCase))
             .Cast<INamedTypeSymbol>().Where(x => x.IsGenericType);
 
         if (genericBasetypes.Count() != 1)
-            throw new InvalidOperationException($"Generic base count is {genericBasetypes.Count()}");
+            throw new InvalidOperationException($"Unable to generate Properties for {classDeclaration.Identifier.ToString()}Generic base count is {genericBasetypes.Count()}");
 
         typeSymbol = genericBasetypes.First();
         typeSymbol =(INamedTypeSymbol)typeSymbol.TypeArguments.First();
@@ -410,13 +401,17 @@ public class DefoldScriptGenerator {
     }
 
 
-    private bool IsFlaggedForScript(INamedTypeSymbol type) {
-        if (type.GetAttributes().Any(x => x.AttributeClass.ToString().EndsWith("GenGOScriptAttribute")))
+    private bool IsFlaggedForScript(INamedTypeSymbol type, out string scriptExtension) {
+        var attr = type.GetAttributes().FirstOrDefault(x => x.AttributeClass.ToString().EndsWith("GenScriptAttribute"));
+        if (attr != null) {
+            scriptExtension = attr.ConstructorArguments.First().Value.ToString();
             return true;
-
+        }
+        
         if (type.BaseType != null)
-            return IsFlaggedForScript(type.BaseType);
+            return IsFlaggedForScript(type.BaseType, out scriptExtension);
 
+        scriptExtension = "";
         return false;
     }
 }
