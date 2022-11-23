@@ -18,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 
 namespace CSharpLua {
   class Program {
@@ -46,6 +47,7 @@ Options
 -noconcurrent   : close concurrent compile
 ";
     public static void Main(string[] args) {
+        Console.WriteLine(Environment.ProcessPath + " " + string.Join(" ", args));
       if (args.Length > 0) {
         try {
           var cmds = Utility.GetCommandLines(args);
