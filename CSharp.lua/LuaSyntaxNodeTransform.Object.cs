@@ -118,9 +118,12 @@ namespace CSharpLua {
         if (expression.IsKind(SyntaxKind.SimpleAssignmentExpression)) {
           var assignment = (AssignmentExpressionSyntax)expression;
           var left = assignment.Left.Accept(this);
-          if (assignment.Right.IsKind(SyntaxKind.CollectionInitializerExpression)) {
+          if (assignment.Right.IsKind(SyntaxKind.CollectionInitializerExpression) || assignment.Right.IsKind(SyntaxKind.ObjectInitializerExpression)) {
             var rightNode = (InitializerExpressionSyntax)assignment.Right;
-            GetObjectCreationInitializer(new LuaMemberAccessExpressionSyntax(temp, (LuaExpressionSyntax)left, true), rightNode, expression);
+            if (rightNode.Expressions.Count > 0) {
+              var leftExpression = (LuaExpressionSyntax)left;
+              GetObjectCreationInitializer(new LuaMemberAccessExpressionSyntax(temp, leftExpression, leftExpression is not LuaIdentifierNameSyntax), rightNode, expression);
+            }
           } else {
             var right = assignment.Right.AcceptExpression(this);
             if (assignment.Left.IsKind(SyntaxKind.ImplicitElementAccess)) {
@@ -1398,16 +1401,24 @@ namespace CSharpLua {
               return expression.Not();
             }
             case SyntaxKind.RecursivePattern: { 
-               var recursivePattern = (RecursivePatternSyntax)notPattern.Pattern;
-               var governingIdentifier = GetIdentifierNameFromExpression(targetExpression);
-               var expression = BuildRecursivePatternExpression(recursivePattern, governingIdentifier, null, targetNode);
-               return expression.Parenthesized().Not();
+              var recursivePattern = (RecursivePatternSyntax)notPattern.Pattern;
+              var governingIdentifier = GetIdentifierNameFromExpression(targetExpression);
+              var expression = BuildRecursivePatternExpression(recursivePattern, governingIdentifier, null, targetNode);
+              return expression.Parenthesized().Not();
             }
-            default: {
-              var expression = notPattern.Pattern.AcceptExpression(this);
-              return targetExpression.NotEquals(expression);
+            case SyntaxKind.ConstantPattern: {
+              var constantPattern = (ConstantPatternSyntax)notPattern.Pattern;
+              var symbol = semanticModel_.GetSymbolInfo(constantPattern.Expression).Symbol;
+              if (symbol != null && symbol.Kind == SymbolKind.NamedType) {
+                var expression = BuildIsPatternExpression(targetNode, constantPattern.Expression, targetExpression);
+                return expression.Not();
+              }
+              break;
             }
           }
+
+          var patternExpression = notPattern.Pattern.AcceptExpression(this);
+          return targetExpression.NotEquals(patternExpression);
         }
         case SyntaxKind.AndPattern:
         case SyntaxKind.OrPattern: {
